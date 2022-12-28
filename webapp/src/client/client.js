@@ -5,6 +5,7 @@ import AuthenticationContext from 'adal-angular';
 import {isDesktopApp} from '../utils/user_utils';
 import {Periods} from '../constants';
 import {id as pluginID} from '../manifest';
+import {getPluginServerRoute} from '../selectors';
 
 // workaround for the "Token renewal operation failed due to timeout" issue
 // https://github.com/AzureAD/azure-activedirectory-library-for-js/issues/391#issuecomment-384784134
@@ -126,12 +127,12 @@ AuthenticationContext.prototype._loginPopup = function _loginPopup(urlNavigate, 
 export default class Client {
     constructor() {
         this.autodiscoverServiceUrl = 'https://webdir.online.lync.com/autodiscover/autodiscoverservice.svc/root';
-        this.registerMeetingFromOnlineVersionUrl = '/plugins/skype4business/api/v1/register_meeting_from_online_version';
-        this.clientIdUrl = '/plugins/skype4business/api/v1/client_id';
-        this.createMeetingInServerVersionUrl = '/plugins/skype4business/api/v1/create_meeting_in_server_version';
-        this.productTypeUrl = '/plugins/skype4business/api/v1/product_type';
-        this.authUrl = '/plugins/skype4business/api/v1/auth';
-        this.redirectUrl = '/plugins/skype4business/api/v1/auth_redirect';
+        this.registerMeetingFromOnlineVersionUrl = `/plugins/${pluginID}/api/v1/register_meeting_from_online_version`;
+        this.clientIdUrl = `/plugins/${pluginID}/api/v1/client_id`;
+        this.createMeetingInServerVersionUrl = `/plugins/${pluginID}/api/v1/create_meeting_in_server_version`;
+        this.productTypeUrl = `/plugins/${pluginID}/api/v1/product_type`;
+        this.authUrl = `/plugins/${pluginID}/api/v1/auth`;
+        this.redirectUrl = `/plugins/${pluginID}/api/v1/auth_redirect`;
     }
 
     createMeeting = async (channelId, currentUserId, getAuthenticationResult, personal = true, topic = '') => {
@@ -263,62 +264,68 @@ export default class Client {
         };
     };
 
-    doGet = async (url, headers = {}, credentials) => {
-        headers.Accept = 'application/json';
-        let options = {
-            method: 'get',
-            headers,
+    doGet = (appendUrl, headers = {}, credentials) => {
+        return async (getState) => {
+            const url = getPluginServerRoute(getState()) + '/' + appendUrl;
+            headers.Accept = 'application/json';
+            let options = {
+                method: 'get',
+                headers,
+            };
+
+            if (url.includes('plugins/' + pluginID)) {
+                options = Client4.getOptions(options);
+            }
+
+            if (credentials) {
+                options.credentials = credentials;
+            }
+
+            const response = await fetch(url, options);
+
+            if (response.ok) {
+                return response.json();
+            }
+
+            const text = await response.text();
+
+            throw new ClientError(Client4.url, {
+                message: text || '',
+                status_code: response.status,
+                url,
+            });
         };
+    };
 
-        if (url.includes('plugins/' + pluginID)) {
-            options = Client4.getOptions(options);
-        }
+    doPost = (appendUrl, body, headers = {}) => {
+        return async (getState) => {
+            const url = getPluginServerRoute(getState()) + '/' + appendUrl;
+            headers.Accept = 'application/json';
+            headers['Content-Type'] = 'application/json';
+            let options = {
+                method: 'post',
+                body: JSON.stringify(body),
+                headers,
+            };
 
-        if (credentials) {
-            options.credentials = credentials;
-        }
+            if (url.includes('plugins/' + pluginID)) {
+                options = Client4.getOptions(options);
+            }
 
-        const response = await fetch(url, options);
+            const response = await fetch(url, options);
 
-        if (response.ok) {
-            return response.json();
-        }
+            if (response.ok) {
+                return response.json();
+            }
 
-        const text = await response.text();
+            const text = await response.text();
 
-        throw new ClientError(Client4.url, {
-            message: text || '',
-            status_code: response.status,
-            url,
-        });
-    }
-
-    doPost = async (url, body, headers = {}) => {
-        headers.Accept = 'application/json';
-        headers['Content-Type'] = 'application/json';
-        let options = {
-            method: 'post',
-            body: JSON.stringify(body),
-            headers,
+            throw new ClientError(Client4.url, {
+                message: text || '',
+                status_code: response.status,
+                url,
+            });
         };
-
-        if (url.includes('plugins/' + pluginID)) {
-            options = Client4.getOptions(options);
-        }
-
-        const response = await fetch(url, options);
-
-        if (response.ok) {
-            return response.json();
-        }
-
-        const text = await response.text();
-
-        throw new ClientError(Client4.url, {
-            message: text || '',
-            status_code: response.status,
-            url,
-        });
     };
 
     generateUuid4 = () => {
