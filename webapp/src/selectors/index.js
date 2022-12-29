@@ -18,4 +18,5 @@ export const getPluginServerRoute = (state) => {
 
     return basePath;
 };
+
 export const getAuthenticationResult = (state) => getPluginState(state).authenticationResult;
